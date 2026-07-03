@@ -105,7 +105,7 @@ submatrix, as shown in \cref{fig:tiles}.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.85\linewidth]{image42.png}
+    \includegraphics[width=0.85\linewidth]{block-tiling.png}
     \caption{Iterate over sub-block tiles to accumulate the outer product of
     submatrix $C$.}
     \label{fig:tiles}
@@ -123,7 +123,7 @@ neat and flexible across various configurations.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.95\linewidth]{image41.png}
+    \includegraphics[width=0.95\linewidth]{thread-tile.png}
     \caption{Each thread calculates a
     $\texttt{TILESCALE\_M}\times\texttt{TILESCALE\_N}$ outer product.}
     \label{fig:outer}
@@ -203,7 +203,7 @@ successfully implemented our final solution.
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.72\textwidth]{image36.png}
+    \includegraphics[width=0.72\textwidth]{perf-configs.png}
     \caption{Performance across various block dimensions and tile scales.}
     \label{fig:blockdims}
 \end{figure*}
@@ -345,14 +345,14 @@ block size for each matrix size.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.9\linewidth]{image33.png}
+    \includegraphics[width=0.9\linewidth]{vs-naive-gflops.png}
     \caption{$\log(\text{GFlops})$ comparison with the naive implementation.}
     \label{fig:lognaive}
 \end{figure}
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.9\linewidth]{image37.png}
+    \includegraphics[width=0.9\linewidth]{vs-naive-speedup.png}
     \caption{Speedup over the naive implementation.}
     \label{fig:speedup}
 \end{figure}
@@ -365,7 +365,7 @@ speedup.
 
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.72\textwidth]{image38.png}
+    \includegraphics[width=0.72\textwidth]{perf-implementations.png}
     \caption{Performance across different implementations.}
     \label{fig:impls}
 \end{figure*}
@@ -425,7 +425,7 @@ not a multiple of \texttt{TILEDIM\_M}.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.9\linewidth]{image39.png}
+    \includegraphics[width=0.9\linewidth]{arithmetic-intensity.png}
     \caption{Computational intensity of our kernel over $N$.}
     \label{fig:qintensity}
 \end{figure}
@@ -450,7 +450,7 @@ we divide the number of flops ($2n^3$) by the number of memory operations
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.85\linewidth]{image34.png}
+    \includegraphics[width=0.85\linewidth]{roofline-achieved.png}
     \caption{Roofline model: achieved performance at $N=2048$ ($q = 24.0$
     Flops/byte).}
     \label{fig:calc1}
@@ -464,7 +464,7 @@ speed of memory operations (\cref{fig:calc2}).
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=0.85\linewidth]{image40.png}
+    \includegraphics[width=0.85\linewidth]{roofline-bandwidth.png}
     \caption{Roofline model: theoretical versus actual memory bandwidth ($q = 24.0$
     versus $34.9$ Flops/byte).}
     \label{fig:calc2}
