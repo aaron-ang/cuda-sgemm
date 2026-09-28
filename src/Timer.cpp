@@ -1,5 +1,6 @@
-#include <sys/time.h>
 #include <stdio.h>
+#include <sys/time.h>
+
 const double kMicro = 1.0e-6;
 double getTime()
 {

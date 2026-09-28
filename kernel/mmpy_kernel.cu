@@ -1,13 +1,11 @@
 // ;-*- mode: c;-*-
 // Matrix multiply device code
+#include "../src/types.h"
+#include "../src/utils.h"
+#include "mytypes.h"
 #include <assert.h>
 #include <math.h>
-#include "../src/utils.h"
-#include "../src/types.h"
-#include "mytypes.h"
 using namespace std;
-
-#include <stdio.h>
 
 #ifdef NAIVE
 __global__ void matMul(int N, _FTYPE_ *C, _FTYPE_ *A, _FTYPE_ *B)

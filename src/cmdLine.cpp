@@ -1,11 +1,10 @@
 #include <assert.h>
-#include <getopt.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <iostream>
-#include <iomanip>
-#include <string.h>
 #include <float.h> // For: FLT_EPSILON
+#include <getopt.h>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "types.h"
 

@@ -11,12 +11,12 @@
  * Sum(k) { 1.0/(i+k+1)*(k+j+1) }
  */
 
-#include <stdlib.h>
-#include <stdio.h> // For: perror
 #include <assert.h>
-#include <iostream>
 #include <float.h> // For: DBL_EPSILON
+#include <iostream>
 #include <math.h>  // For: fabs
+#include <stdio.h> // For: perror
+#include <stdlib.h>
 
 #include "types.h"
 

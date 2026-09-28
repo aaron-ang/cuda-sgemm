@@ -1,5 +1,4 @@
 #include "mytypes.h"
-#include <stdio.h>
 
 void setGrid(int n, dim3 &blockDim, dim3 &gridDim)
 {
