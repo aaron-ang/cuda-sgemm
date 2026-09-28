@@ -72,7 +72,7 @@ Requires a CUDA toolkit and an NVIDIA GPU (developed and benchmarked on a T4). B
 flags are read from `kernel/OPTIONS.txt`.
 
 ```bash
-# build
+# build (for a T4; on another GPU add SM=<compute capability>, e.g. SM=121 on a GB10)
 make -C build `cat kernel/OPTIONS.txt`
 
 # build with a cuBLAS reference for comparison

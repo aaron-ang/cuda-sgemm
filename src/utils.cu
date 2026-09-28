@@ -61,13 +61,17 @@ int ReportDevice()
 
 	printf("\nDevice is a %s, capability: %d.%d\n", deviceProp.name, deviceProp.major, deviceProp.minor);
 
-	printf("Clock speed: %f MHz\n", ((double)deviceProp.clockRate) / 1000);
+	// clockRate/memoryClockRate were removed from cudaDeviceProp in CUDA 13; the attributes work everywhere (kHz)
+	int clockKHz = 0, memClockKHz = 0;
+	cudaDeviceGetAttribute(&clockKHz, cudaDevAttrClockRate, devID);
+	cudaDeviceGetAttribute(&memClockKHz, cudaDevAttrMemoryClockRate, devID);
+	printf("Clock speed: %f MHz\n", ((double)clockKHz) / 1000);
 	printf("# cores: %d\n", deviceProp.multiProcessorCount);
 	double gb = 1024 * 1024 * 1024;
 	printf("\nGlobal memory: %fGB\n", ((double)deviceProp.totalGlobalMem) / gb);
-	printf("Memory Clock Rate (MHz): %f\n", (double)deviceProp.memoryClockRate / 1000);
+	printf("Memory Clock Rate (MHz): %f\n", (double)memClockKHz / 1000);
 	printf("Memory Bus Width (bits): %d\n", deviceProp.memoryBusWidth);
-	printf("Peak Memory Bandwidth (GB/s): %f\n", 2.0 * deviceProp.memoryClockRate * (deviceProp.memoryBusWidth / 8) / 1.0e6);
+	printf("Peak Memory Bandwidth (GB/s): %f\n", 2.0 * memClockKHz * (deviceProp.memoryBusWidth / 8.0) / 1.0e6);
 	printf("L2 Cache size: (KB): %f\n", (double)deviceProp.l2CacheSize / 1024);
 	if (deviceProp.ECCEnabled)
 		printf("ECC Enabled\n");

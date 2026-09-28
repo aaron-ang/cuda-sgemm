@@ -1,14 +1,13 @@
 LIB_BLAS  = -lblas -lpthread -lm
 LDLIBS   += $(LIB_BLAS)
-INCLUDES += -I/usr/include/openblas
+INCLUDES += -I/usr/include/openblas $(shell pkg-config --cflags-only-I openblas 2>/dev/null)
 C++FLAGS += $(INCLUDES)
 
 CUDA_INSTALL_PATH=/usr/local/cuda-11.6
 
-GENCODE_SM75  :=-gencode arch=compute_75,code=sm_75
-# GENCODE_SM75  :=-gencode arch=compute_75,code=compute_75
-
-GENCODE_FLAGS :=$(GENCODE_SM75)
+# Target GPU: 75 = T4 (default). Override for other GPUs, e.g. `make SM=121` on a GB10.
+SM ?= 75
+GENCODE_FLAGS := -gencode arch=compute_$(SM),code=sm_$(SM)
 PTXFLAGS=-v
 # PTXFLAGS=-dlcm=ca 
 NVCCFLAGS= -O3 $(GENCODE_FLAGS) -c
