@@ -1,4 +1,3 @@
-
 #include "mytypes.h"
 #include <stdio.h>
 

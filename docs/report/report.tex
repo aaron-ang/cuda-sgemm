@@ -186,7 +186,8 @@ for (uint resIdxM = 0; resIdxM < TILESCALE_M; ++resIdxM) {
 \end{figure}
 
 Our development progressed through several stages. We started with shared memory
-optimization, achieving a 50\% improvement over the naive kernel. We then implemented
+optimization, which improved on our coalesced global-memory kernel by about 20\% at
+small $N$ and up to about 70\% at $N=2048$ (\cref{fig:impls}). We then implemented
 1-D block tiling where each thread calculated a column of results, nearly doubling
 performance. The transition to
 two-dimensional block tiling was the hardest as we misunderstood the definitions of
@@ -242,57 +243,50 @@ the number of warps and the possible maximum occupancy, as summarized in
 \begin{table*}[t]
 \centering
 \caption{Occupancy analysis for several thread-block and tile configurations at
-$N=256$ on the NVIDIA T4.}
+$N=256$ on the NVIDIA T4. Regs/Thr.\ is the \texttt{ptxas} count for
+\texttt{sm\_75} (CUDA~13); Warps is the total over the grid. Occupancy is shown with
+the original 64\,KB dynamic shared-memory request and with the exact tile size.}
 \label{tab:occupancy}
 \small
-\begin{tabular}{@{}l c c c c c c c@{}}
+\begin{tabular}{@{}l c c c c c c c c@{}}
 \toprule
-\textbf{Configuration} & \textbf{Tile Dim.} & \textbf{Thread Blocks} &
-\textbf{Threads/Block} & \textbf{Threads} & \textbf{Regs/Thread} &
-\textbf{Warps} & \textbf{Max Occ.} \\
+\textbf{Configuration} & \textbf{Tile Dim.} & \textbf{Blocks} &
+\textbf{Thr./Block} & \textbf{Threads} & \textbf{Regs/Thr.} &
+\textbf{Warps} & \textbf{Occ.\ (64\,KB)} & \textbf{Occ.\ (exact)} \\
 \midrule
-\texttt{bx=32 by=32 tm=2 tn=2} & 64  & 16 & 1024 & 16384 & 8  & 512 & 100\% \\
-\texttt{bx=16 by=16 tm=8 tn=8} & 128 & 4  & 256  & 1024  & 80 & 32  & 80\%  \\
-\texttt{bx=8 by=8 tm=8 tn=8}   & 64  & 16 & 64   & 1024  & 80 & 32  & 80\%  \\
-\texttt{bx=16 by=16 tm=4 tn=4} & 64  & 16 & 256  & 4096  & 24 & 128 & 100\% \\
+\texttt{bx=32 by=32 tm=2 tn=2} & 64  & 16 & 1024 & 16384 & 64  & 512 & 100\%  & 100\% \\
+\texttt{bx=16 by=16 tm=8 tn=8} & 128 & 4  & 256  & 1024  & 172 & 32  & 25\%   & 25\%  \\
+\texttt{bx=8 by=8 tm=8 tn=8}   & 64  & 16 & 64   & 1024  & 222 & 32  & 6.25\% & 25\%  \\
+\texttt{bx=16 by=16 tm=4 tn=4} & 64  & 16 & 256  & 4096  & 91  & 128 & 25\%   & 50\%  \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
 One intuitive explanation for why the configurations \texttt{bx=32,by=32,tm=2,tn=2}
 and \texttt{bx=16,by=16,tm=4,tn=4} perform better at $N=256$ is that they require more
-warps, which leads to more concurrent SM usage.
+warps, which leads to more concurrent SM usage. With $128\times128$ tiles, $N=256$
+yields only 4 thread blocks, so 36 of the T4's 40 SMs sit idle.
 
-The second reason could be the limitation of register file size. For the
-configurations \texttt{bx=16,by=16,tm=8,tn=8} and \texttt{bx=8,by=8,tm=8,tn=8}, each
-thread utilizes $8 + 8 + 8\times8 = 80$ registers. The NVIDIA T4 GPU supports a
-maximum of 256\,KB register files (equivalent to $64\text{K}$ float registers) per SM
-and a maximum of 32 concurrent warps per SM.
+The second reason is the per-SM resource limit. For
+\texttt{bx=16,by=16,tm=8,tn=8}, a hand count gives $8 + 8 + 8\times8 = 80$ registers
+per thread, but that ignores pointers, indices, and loop state; \texttt{ptxas}
+reports 172. The T4 has 64K 32-bit registers, at most 32 resident warps, and 64\,KB
+of shared memory per SM. A 256-thread block (8 warps) at 172 registers needs about
+45K registers (allocated in 256-register units per warp), so only
+$\lfloor 65536/45056 \rfloor = 1$ block fits per SM. Even at the hand-counted 80
+registers ($2560$ per warp), registers would allow
+$\lfloor 65536/(8\times2560) \rfloor = 3$ blocks, i.e., 24 warps (75\%).
 
-For this implementation, the register file size becomes the limiting factor for
-occupancy when $N$ is large because 32 warps would require:
-\begin{equation*}
-32\ \text{warps} \times 32\ \text{threads} \times 80\ \text{regs} = 81{,}920\
-\text{registers},
-\end{equation*}
-which exceeds the maximum of $64\text{K}$ float registers. As a result, the maximum
-number of active warps is given by:
-\begin{equation*}
-\frac{\text{total registers}}{\text{registers per warp}}
-= \frac{64\text{K}}{80 \times 32} = 25.6\ \text{warps},
-\end{equation*}
-which leads to an occupancy of:
-\begin{equation*}
-25.6 / 32 \approx 80\%.
-\end{equation*}
-Thus, the SM is underutilized at approximately 80\% occupancy due to register
-limitations. The total shared memory size is
-$32 \times 16 \times 8 \times 2 \times 4\,\text{B} = 32\,\text{KB}$, which is within
-the 64\,KB limitation.
-
-For the configurations \texttt{bx=32,by=32,tm=2,tn=2} and
-\texttt{bx=16,by=16,tm=4,tn=4}, the register file size is no longer a limitation to
-occupancy; the occupancy is 100\%.
+Shared memory adds a second cap. The kernel uses only
+$(T_M T_K + T_K T_N)\times4\,\text{B} = 32\,\text{KB}$ for \texttt{As} and
+\texttt{Bs}, but our host code requested 64\,KB of dynamic shared memory per block,
+which by itself allows only one block per SM. Both limits give
+$8/32 = 25\%$ occupancy. We have since changed the request to the exact tile size.
+Shared memory then admits two blocks (50\%), but at 172 registers the register
+file still caps this configuration at one block. Reaching 50\% would need at most
+128 registers per thread (e.g., \texttt{\_\_launch\_bounds\_\_(256,2)}). The fix does
+raise the smaller-tile configurations in \cref{tab:occupancy}, which were held to
+one block per SM by the 64\,KB request.
 
 We noticed that high occupancy is not always needed to reach high performance when
 the arithmetic intensity $q$ is small or large. $q$ is given by:
@@ -300,23 +294,27 @@ the arithmetic intensity $q$ is small or large. $q$ is given by:
 q = \frac{f}{m},
 \end{equation*}
 where $f$ is the number of floating point operations, which is $2N^3$, and $m$ is the
-number of memory operations. Each block tile loads $N(T_M + T_N)$ values from matrices
-$A$ and $B$ into shared memory \texttt{As} and \texttt{Bs}, and the number of block
-tiles is $N^2/(T_M T_N)$. We also perform $N^2$ store operations back to global
-memory. Thus, we can simplify $q$ as:
+number of 4-byte elements moved to or from global memory. Each block tile loads
+$N(T_M + T_N)$ values from matrices $A$ and $B$ into shared memory \texttt{As} and
+\texttt{Bs}, and the number of block tiles is $N^2/(T_M T_N)$. We also perform $N^2$
+store operations back to global memory. Thus, in flops per element,
 \begin{equation*}
-q = \frac{2N^3}{\dfrac{2N^3(T_M + T_N)}{T_M T_N} + N^2}
+q = \frac{2N^3}{\dfrac{N^3(T_M + T_N)}{T_M T_N} + N^2}
   = \frac{2N\,T_M T_N}{N(T_M + T_N) + T_M T_N}.
 \end{equation*}
 If we consider the square cases where $T_M = T_N$, we can simplify $q$ as:
 \begin{equation*}
-q = \frac{2N\,T_M}{2N + T_M}.
+q = \frac{2N\,T_M}{2N + T_M}\ \text{flop/element}
+  = \frac{N\,T_M}{2(2N + T_M)}\ \text{flop/byte},
 \end{equation*}
+which approaches $T_M/4 = 32$\,flop/byte for $T_M=128$ (31.0 at $N=2048$), past the
+T4's ridge point of $7680/320 = 24$\,flop/byte.
 When $T_M$ is large, we become compute-bound and higher occupancy would not lead to
 better throughput, as explained in the cusp behavior described by
 Volkov~\cite{volkov_occupancy}. For the configuration \texttt{bx=16,by=16,tm=8,tn=8},
 it has the highest $T_M$ of 128, yet it outperforms other configurations despite its
-lower occupancy.
+25\% occupancy: its per-thread ILP (64 independent FMAs per $k$ step) hides latency
+that other configurations need more resident warps to cover.
 
 \paragraph{(c) Peak performance by matrix size.}
 \Cref{tab:peakgf} documents the peak GFlops achieved and the corresponding thread
@@ -387,38 +385,41 @@ We noticed two unusual behaviors in performance.
 Our 2D-tiling-64-outputs implementation and cuBLAS exhibit a significant performance
 drop when the matrix size $N$ is not a multiple of 128. In contrast, other
 implementations, such as 1-D blocking and naive methods, show much less fluctuation.
-This disparity arises because our implementation is more complex, involving additional
-branching conditions that cause more overhead during control divergence.
+The main cause is wave quantization. Our kernel fits one block per SM
+(\cref{tab:occupancy}), and the T4 has 40 SMs, so a launch of
+$\lceil N/128\rceil^2$ blocks runs in $\lceil \lceil N/128\rceil^2/40\rceil$ waves,
+and a partial last wave leaves SMs idle. $N=1023$ and $1024$ both launch 64 blocks
+(2 waves), while $N=1025$ launches 81 blocks and needs a third wave for a single
+block. That predicts roughly $2/3$ of the 3920\,GFlops at $N=1024$, about 2600\,GFlops.
+We measured about 2900, so the model is somewhat pessimistic but accounts for most
+of the drop. Likewise,
+$N=2048$ launches 256 blocks (7 waves), and $N=2049$ launches 289 (8 waves). The
+prediction, $4780\times7/8 \approx 4183$\,GFlops, matches the measured 4181.0.
+$N=1199$, 1200, and 1201 all launch 100 blocks (3 waves), which explains why these
+three sizes perform almost the same.
 
-During boundary checks, when we attempt to fill the \texttt{As} and \texttt{Bs}
-matrices with zeros for out-of-bounds accesses, some threads within a warp follow
-different execution paths. As a result, the GPU must re-execute the warp for threads
-that take the alternate path, causing performance degradation. For example, $N=1024$
-benefits from perfect tiling and memory alignment. However, $N=1023$ leads to slight
-tiling imbalances, resulting in minor inefficiencies, while $N=1025$ suffers from both
-uneven tiling and memory misalignment, significantly reducing warp utilization. This
-results in a performance drop from over 3900 GFlops to around 2900 GFlops.
-
-A similar performance drop occurs when $N=1199$, 1200, and 1201. However, all these
-matrix sizes fail to reach good memory alignment, and there is minimal difference in
-performance across these three values. The varying degrees of performance degradation
-suggest using different tile sizes, with each matrix size resulting in a different
-level of tiling inefficiency.
+Control divergence adds a smaller cost. Boundary checks that zero-fill
+\texttt{As} and \texttt{Bs} send threads in a warp down different paths, and edge
+tiles do wasted work. This explains the small gap between $N=1023$ (3829.8\,GFlops)
+and $N=1024$ (3919.6), but not the much larger gap between 1023 and 1025.
 
 \smallskip
 \noindent\emph{2) Performance degradation when $N$ is greater than 768.}
 When $N>768$, we observe that performance no longer improves significantly and, in
-some cases, even degrades for certain matrix sizes. One possible reason is that the
-kernel is increasingly memory-bound as $N$ increases. Since we fixed our kernel to
-compute an $8\times8$ block per thread, computational intensity ($q$) plateaus after
-$N=1000$. We use the same formula for $q$ as in \cref{sec:results}, giving us a
-sawtooth logarithmic graph shown in \cref{fig:qintensity}:
+some cases, even degrades for certain matrix sizes. The kernel is not memory-bound
+here: with a fixed $8\times8$ block per thread, arithmetic intensity plateaus near
+$T_M/4 = 32$\,flop/byte, above the T4's ridge point of 24. Counting the padded tiles
+($\lceil N/T_M\rceil^2$ blocks, each loading $2N\,T_M$ elements, plus $N^2$ stores of
+4\,B each) gives the sawtooth in \cref{fig:qintensity}:
 \begin{equation*}
-q = \frac{2N^3}{\bigl\lceil N/T_M \bigr\rceil^2 \cdot 2N\,T_M + N^2}.
+q = \frac{2N^3}{4\,\bigl(\bigl\lceil N/T_M \bigr\rceil^2 \cdot 2N\,T_M + N^2\bigr)}\
+\text{flop/byte}.
 \end{equation*}
-The shape of the graph confirms our hypothesis that the performance of our
-matrix-multiply implementation does not scale linearly with $N$ and dips when $N$ is
-not a multiple of \texttt{TILEDIM\_M}.
+The plateau instead reflects wave quantization and the compute ceiling. $N=768$
+launches 36 blocks, one nearly full wave, and reaches about 4150\,GFlops, while
+$N=900$ launches 64 blocks, whose second wave fills only 24 of 40 SMs, and drops to
+about 3000. As $N$ grows, the partial last wave matters less and throughput
+approaches the 4780\,GFlops seen at $N=2048$.
 
 % Flush the full-width Fig. 8 before Fig. 9 so they stay in numerical order.
 \FloatBarrier
@@ -426,7 +427,8 @@ not a multiple of \texttt{TILEDIM\_M}.
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.9\linewidth]{arithmetic-intensity.png}
-    \caption{Computational intensity of our kernel over $N$.}
+    \caption{Arithmetic intensity of our kernel over $N$, plotted in flop per 4-byte
+element (divide by 4 for flop/byte).}
     \label{fig:qintensity}
 \end{figure}
 
@@ -445,28 +447,32 @@ cycles per second per core. Thus,
 \end{aligned}
 \end{equation*}
 For $n=2048$, we achieved 4779.9 GFlops. To calculate the arithmetic intensity $q$,
-we divide the number of flops ($2n^3$) by the number of memory operations
-($2n^3/\texttt{TILEDIM\_M}$ loads and $n^2$ stores), as shown in \cref{fig:calc1}.
+we divide the number of flops ($2n^3$) by the bytes moved
+($2n^3/\texttt{TILEDIM\_M}$ element loads and $n^2$ element stores, 4\,B each),
+giving $q \approx 31$\,flop/byte, past the ridge point, as shown in \cref{fig:calc1}.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.85\linewidth]{roofline-achieved.png}
-    \caption{Roofline model: achieved performance at $N=2048$ ($q = 24.0$
-    Flops/byte).}
+    \caption{Roofline model: achieved performance at $N=2048$. The dotted line
+    marks the ridge point ($24.0$\,flop/byte), not the kernel's intensity. The
+    plotted point uses flop per element ($\approx124$), i.e., $\approx31$\,flop/byte.}
     \label{fig:calc1}
 \end{figure}
 
 \paragraph{(b) Effect of reduced memory bandwidth.}
-$q = \text{peak flops} / \text{bandwidth} = 7680 / 320 = 24.0$ Flops/byte. The new
-$q = 7680 / 220 = 34.9$ Flops/byte. The value of $q$ increased. This means we now need
-greater arithmetic intensity to achieve peak performance, since we are limited by the
-speed of memory operations (\cref{fig:calc2}).
+The ridge point is $q^* = \text{peak flops} / \text{bandwidth} = 7680 / 320 = 24.0$
+flop/byte. At the measured 220\,GB/s, it rises to $q^* = 7680 / 220 = 34.9$ flop/byte.
+A kernel now needs higher arithmetic intensity to reach peak. At about 31 flop/byte,
+ours would fall just below the new ridge, but its bandwidth bound
+($220 \times 31 \approx 6800$\,GFlops) is still above the 4780\,GFlops we achieve
+(\cref{fig:calc2}).
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=0.85\linewidth]{roofline-bandwidth.png}
-    \caption{Roofline model: theoretical versus actual memory bandwidth ($q = 24.0$
-    versus $34.9$ Flops/byte).}
+    \caption{Roofline model: theoretical versus actual memory bandwidth (ridge points
+    $q^* = 24.0$ versus $34.9$ flop/byte).}
     \label{fig:calc2}
 \end{figure}
 

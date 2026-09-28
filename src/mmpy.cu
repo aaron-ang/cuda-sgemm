@@ -23,6 +23,14 @@
 #include "../kernel/mmpy_kernel.cu"
 #endif
 
+// Dynamic shared memory per block: As[TILEDIM_M][TILEDIM_K] + Bs[TILEDIM_K][TILEDIM_N].
+// Request exactly this much; over-requesting (e.g. 64 KB) caps blocks per SM.
+#ifdef NAIVE
+#define SMEM_BYTES 0
+#else
+#define SMEM_BYTES ((TILEDIM_M * TILEDIM_K + TILEDIM_K * TILEDIM_N) * sizeof(_FTYPE_))
+#endif
+
 #include "types.h"
 #include "utils.h"
 #include "cublas_v2.h"
@@ -227,8 +235,8 @@ int main(int argc, char **argv)
 			 cudaSharedmemCarveoutMaxShared);
     checkCUDAError("Error seting shared memory to 64K carveout");
     cudaFuncSetAttribute(matMul, cudaFuncAttributeMaxDynamicSharedMemorySize,
-			 1024 * 64);
-    checkCUDAError("Error seting shared memory to 64K");
+			 SMEM_BYTES);
+    checkCUDAError("Error setting max dynamic shared memory size");
     #endif
 
 
@@ -261,7 +269,7 @@ int main(int argc, char **argv)
 #else // !CUBLAS_TEST
     for (int r = 0; r < SCALE * reps; r++)
         #ifdef TARGET_T4
-            matMul<<<grid, threads, 64 *1024>>>(n, d_C, d_A, d_B);
+            matMul<<<grid, threads, SMEM_BYTES>>>(n, d_C, d_A, d_B);
         #endif
 #endif
 
@@ -292,7 +300,7 @@ int main(int argc, char **argv)
     cudaMemset((void **)d_C, 0, n2);
     checkCUDAError("Error clearing device memory matrix C");
     #ifdef TARGET_T4
-    matMul<<<grid, threads, 64 * 1024>>>(n, d_C, d_A, d_B);
+    matMul<<<grid, threads, SMEM_BYTES>>>(n, d_C, d_A, d_B);
     #endif
     cudaDeviceSynchronize();
     checkCUDAError("Error in matrixMul kernel");
