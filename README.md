@@ -33,6 +33,29 @@ occupancy analysis: **[docs/report.pdf](docs/report.pdf)** (LaTeX source in
 
 ![Roofline model at N=2048](docs/roofline.png)
 
+## Round two: the follow-ups, on a GB10
+
+[`next/sgemm_next.cu`](next/sgemm_next.cu) applies the report's "next steps" one
+at a time on top of the course kernel and benchmarks each against cuBLAS (FP32,
+TF32 off). Measured on an NVIDIA GB10 (Blackwell, 48 SMs), so the numbers
+are **not comparable** with the T4 results above.
+
+| Step | N=2048 GFLOP/s | vs cuBLAS | N=4096 GFLOP/s | vs cuBLAS |
+|---|---|---|---|---|
+| Course kernel | 9,673 | 58% | 10,540 | 64% |
+| + `__launch_bounds__(256,2)` | 11,266 | 68% | 12,173 | 74% |
+| + `float4` loads, A transposed in smem | 13,439 | 81% | 13,692 | 83% |
+| + conflict-free smem reads | 13,846 | 83% | 14,060 | 85% |
+| + warp tiling (BK=32 / BK=16) | 13,809 / 14,261 | 83% / 86% | 14,268 / 14,786 | 86% / 89% |
+| + double buffering (BK=16) | 14,600 | 88% | 15,010 | 91% |
+| cuBLAS | 16,603 | 100% | 16,545 | 100% |
+
+```bash
+cd next
+nvcc -O3 -std=c++17 -arch=sm_121 -o sgemm_next sgemm_next.cu -lcublas   # use your GPU's sm_XX
+./sgemm_next 1024 1025 2048 2049 4096
+```
+
 ## Layout
 
 | Path | Contents |
