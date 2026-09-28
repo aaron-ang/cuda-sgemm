@@ -1,0 +1,20 @@
+# clangd settings for IDEs. Mirrors `make -C build $(cat kernel/OPTIONS.txt)`.
+CompileFlags:
+  Add:
+    - -DTARGET_T4
+    - -DBLOCKDIM_X=16
+    - -DBLOCKDIM_Y=16
+    - -DTILESCALE_M=8
+    - -DTILESCALE_N=8
+    - -I/usr/include/openblas
+---
+# CUDA sources: pick a GPU arch clang knows (sm_75 = T4) and skip the check
+# that the installed CUDA toolkit is one clang supports.
+If:
+  PathMatch: .*\.(cu|cuh)
+CompileFlags:
+  Add:
+    - -xcuda
+    - --cuda-path=/usr/local/cuda
+    - --cuda-gpu-arch=sm_75
+    - --no-cuda-version-check
