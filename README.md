@@ -38,7 +38,9 @@ occupancy analysis: **[docs/report.pdf](docs/report.pdf)** (LaTeX source in
 [`next/sgemm_next.cu`](next/sgemm_next.cu) holds every kernel below (k0–k15) and
 benchmarks each against cuBLAS (FP32, TF32 off). Measured on an NVIDIA GB10
 (Blackwell, 48 SMs), so the numbers are **not comparable** with the T4 results
-above.
+above. All tables below come from one session on an otherwise idle machine: each
+number is the median over 3 runs of the 7-run median. Runs vary by up to ~5%,
+since the GB10 hits its power cap during SGEMM.
 
 ```bash
 cd next
@@ -52,45 +54,43 @@ k0–k5 apply the report's "next steps" one at a time on top of the course kerne
 
 | Step | N=2048 GFLOP/s | vs cuBLAS | N=4096 GFLOP/s | vs cuBLAS |
 |---|---|---|---|---|
-| Course kernel | 9,673 | 58% | 10,540 | 64% |
-| + `__launch_bounds__(256,2)` | 11,266 | 68% | 12,173 | 74% |
-| + `float4` loads, A transposed in smem | 13,439 | 81% | 13,692 | 83% |
-| + conflict-free smem reads | 13,846 | 83% | 14,060 | 85% |
-| + warp tiling (BK=32 / BK=16) | 13,809 / 14,261 | 83% / 86% | 14,268 / 14,786 | 86% / 89% |
-| + double buffering (BK=16) | 14,600 | 88% | 15,010 | 91% |
-| cuBLAS | 16,603 | 100% | 16,545 | 100% |
+| Course kernel | 9,661 | 60% | 10,723 | 63% |
+| + `__launch_bounds__(256,2)` | 11,508 | 71% | 12,616 | 74% |
+| + `float4` loads, A transposed in smem | 13,882 | 86% | 14,181 | 83% |
+| + conflict-free smem reads | 14,323 | 88% | 14,623 | 85% |
+| + warp tiling (BK=32 / BK=16) | 14,234 / 14,687 | 88% / 91% | 14,812 / 15,209 | 87% / 89% |
+| + double buffering (BK=16) | 14,933 | 92% | 15,392 | 90% |
+| cuBLAS | 16,204 | 100% | 17,119 | 100% |
 
 ### Round three: closing the gap to cuBLAS
 
-k6–k11. A later session, so k5 and cuBLAS were re-measured alongside. Each number
-is the median over 3 runs of the 7-run median; runs vary by ~2–3%, since the GB10
-hits its power cap during SGEMM and settles near 2.0 GHz.
+k6–k11, from the same runs as round two.
 
 | Step | N=2048 GFLOP/s | vs cuBLAS | N=4096 GFLOP/s | vs cuBLAS |
 |---|---|---|---|---|
-| k5 (re-measured) | 14,113 | 87% | 14,322 | 90% |
-| k6 B column pairs swapped (dropped) | 13,652 | 84% | 14,304 | 90% |
-| k7 `cp.async`, k5 tiling (dropped) | 13,896 | 86% | 14,181 | 89% |
-| **k8 128×256 tile, 16×8 per thread, `cp.async`** | **16,088** | **99%** | **16,270** | **102%** |
-| k9 k8 + split-K=3 (dropped at these sizes) | 14,089 | 87% | 15,255 | 96% |
-| k10 128×128 tile, 16×8 per thread, A k-major | 15,785 | 97% | 16,149 | 101% |
-| k11 picks k8/k9/k10 per size (= k8 here) | 15,614 | 96% | 16,248 | 102% |
-| cuBLAS (same runs) | 16,209 | 100% | 15,931 | 100% |
+| k5 (from round two) | 14,933 | 92% | 15,392 | 90% |
+| k6 B column pairs swapped (dropped) | 14,604 | 90% | 15,390 | 90% |
+| k7 `cp.async`, k5 tiling (dropped) | 14,490 | 89% | 15,384 | 90% |
+| **k8 128×256 tile, 16×8 per thread, `cp.async`** | **16,625** | **103%** | **17,839** | **104%** |
+| k9 k8 + split-K=3 (dropped at these sizes) | 15,101 | 93% | 16,272 | 95% |
+| k10 128×128 tile, 16×8 per thread, A k-major | 16,581 | 102% | 17,615 | 103% |
+| k11 picks k8/k9/k10 per size (= k8 here) | 16,932 | 104% | 17,752 | 104% |
+| cuBLAS (same runs) | 16,204 | 100% | 17,119 | 100% |
 
 ### Round four: odd sizes and the last wave
 
-k12–k15, same method, one session. N=2049 is added because it leaves the last
-wave of 128×256 tiles partial, which is what k14 targets.
+k12–k15, from the same runs. N=2049 is added because it leaves the last wave of
+128×256 tiles partial, which is what k14 targets.
 
 | Step | N=2048 | vs cuBLAS | N=2049 | vs cuBLAS | N=4096 | vs cuBLAS |
 |---|---|---|---|---|---|---|
-| k8 (re-measured) | 16,101 | 99% | 12,541 | 106% | 17,034 | 105% |
-| k11 (re-measured) | 15,675 | 97% | 13,627 | 115% | 17,168 | 105% |
-| k12 k-major A at 128×256, register cap (dropped) | 15,440 | 95% | 12,034 | 101% | 16,730 | 103% |
-| k13 k8 with 4×4-lane half-warps, as cuBLAS (dropped, = k8; ncu: 25% more shared-load wavefronts, not fewer) | 15,862 | 98% | 12,522 | 106% | 17,093 | 105% |
-| **k14 k8 + last partial wave split into K pieces over all SMs** | **16,347** | **101%** | **14,108** | **119%** | **17,243** | **106%** |
-| k15 k11 below one wave of tiles, else k14 | 16,497 | 102% | 13,781 | 116% | 17,295 | 106% |
-| cuBLAS (same runs) | 16,240 | 100% | 11,864 | 100% | 16,296 | 100% |
+| k8 (from round three) | 16,625 | 103% | 13,172 | 105% | 17,839 | 104% |
+| k11 (from round three) | 16,932 | 104% | 14,297 | 114% | 17,752 | 104% |
+| k12 k-major A at 128×256, register cap (dropped) | 16,535 | 102% | 12,496 | 99% | 17,305 | 101% |
+| k13 k8 with 4×4-lane half-warps, as cuBLAS (dropped, = k8; ncu: 25% more shared-load wavefronts, not fewer) | 16,927 | 104% | 13,127 | 104% | 17,646 | 103% |
+| **k14 k8 + last partial wave split into K pieces over all SMs** | **17,333** | **107%** | **14,663** | **117%** | **18,057** | **105%** |
+| k15 k11 below one wave of tiles, else k14 | 17,471 | 108% | 14,595 | 116% | 18,020 | 105% |
+| cuBLAS (same runs) | 16,204 | 100% | 12,578 | 100% | 17,119 | 100% |
 
 ## Layout
 
