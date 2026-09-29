@@ -33,12 +33,22 @@ occupancy analysis: **[docs/report.pdf](docs/report.pdf)** (LaTeX source in
 
 ![Roofline model at N=2048](docs/roofline.png)
 
-## Round two: the follow-ups, on a GB10
+## Follow-ups on a GB10
 
-[`next/sgemm_next.cu`](next/sgemm_next.cu) applies the report's "next steps" one
-at a time on top of the course kernel and benchmarks each against cuBLAS (FP32,
-TF32 off). Measured on an NVIDIA GB10 (Blackwell, 48 SMs), so the numbers
-are **not comparable** with the T4 results above.
+[`next/sgemm_next.cu`](next/sgemm_next.cu) holds every kernel below (k0–k15) and
+benchmarks each against cuBLAS (FP32, TF32 off). Measured on an NVIDIA GB10
+(Blackwell, 48 SMs), so the numbers are **not comparable** with the T4 results
+above.
+
+```bash
+cd next
+nvcc -O3 -std=c++17 -arch=sm_121 -o sgemm_next sgemm_next.cu -lcublas   # use your GPU's sm_XX
+./sgemm_next 1024 1025 2048 2049 4096
+```
+
+### Round two: the report's next steps
+
+k0–k5 apply the report's "next steps" one at a time on top of the course kernel.
 
 | Step | N=2048 GFLOP/s | vs cuBLAS | N=4096 GFLOP/s | vs cuBLAS |
 |---|---|---|---|---|
@@ -50,9 +60,11 @@ are **not comparable** with the T4 results above.
 | + double buffering (BK=16) | 14,600 | 88% | 15,010 | 91% |
 | cuBLAS | 16,603 | 100% | 16,545 | 100% |
 
-**Round three** (k6–k11 in the same file; a later session, so k5 and cuBLAS were
-re-measured alongside; median over 3 runs of the 7-run median; runs vary by ~2–3%,
-since the GB10 hits its power cap during SGEMM and settles near 2.0 GHz):
+### Round three: closing the gap to cuBLAS
+
+k6–k11. A later session, so k5 and cuBLAS were re-measured alongside. Each number
+is the median over 3 runs of the 7-run median; runs vary by ~2–3%, since the GB10
+hits its power cap during SGEMM and settles near 2.0 GHz.
 
 | Step | N=2048 GFLOP/s | vs cuBLAS | N=4096 GFLOP/s | vs cuBLAS |
 |---|---|---|---|---|
@@ -65,8 +77,10 @@ since the GB10 hits its power cap during SGEMM and settles near 2.0 GHz):
 | k11 picks k8/k9/k10 per size (= k8 here) | 15,614 | 96% | 16,248 | 102% |
 | cuBLAS (same runs) | 16,209 | 100% | 15,931 | 100% |
 
-**Round four** (k12–k15; same method, one session; N=2049 added because it leaves
-the last wave of 128×256 tiles partial, which is what k14 targets):
+### Round four: odd sizes and the last wave
+
+k12–k15, same method, one session. N=2049 is added because it leaves the last
+wave of 128×256 tiles partial, which is what k14 targets.
 
 | Step | N=2048 | vs cuBLAS | N=2049 | vs cuBLAS | N=4096 | vs cuBLAS |
 |---|---|---|---|---|---|---|
@@ -77,12 +91,6 @@ the last wave of 128×256 tiles partial, which is what k14 targets):
 | **k14 k8 + last partial wave split into K pieces over all SMs** | **16,347** | **101%** | **14,108** | **119%** | **17,243** | **106%** |
 | k15 k11 below one wave of tiles, else k14 | 16,497 | 102% | 13,781 | 116% | 17,295 | 106% |
 | cuBLAS (same runs) | 16,240 | 100% | 11,864 | 100% | 16,296 | 100% |
-
-```bash
-cd next
-nvcc -O3 -std=c++17 -arch=sm_121 -o sgemm_next sgemm_next.cu -lcublas   # use your GPU's sm_XX
-./sgemm_next 1024 1025 2048 2049 4096
-```
 
 ## Layout
 
