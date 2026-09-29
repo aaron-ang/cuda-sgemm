@@ -19,9 +19,10 @@ CompileFlags:
     - --cuda-gpu-arch=sm_75
     - --no-cuda-version-check
 ---
-# next/ targets the GB10 (sm_121); its split-K path needs float4 atomicAdd (sm_90+).
+# next/ targets the GB10 (sm_121), which clang 18 does not know. sm_90 is the
+# closest arch it knows with float4 atomicAdd, which the split-K path needs.
 If:
   PathMatch: next/.*\.cu
 CompileFlags:
   Remove: [--cuda-gpu-arch=*]
-  Add: [--cuda-gpu-arch=sm_121]
+  Add: [--cuda-gpu-arch=sm_90]
