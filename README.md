@@ -50,6 +50,34 @@ are **not comparable** with the T4 results above.
 | + double buffering (BK=16) | 14,600 | 88% | 15,010 | 91% |
 | cuBLAS | 16,603 | 100% | 16,545 | 100% |
 
+**Round three** (k6–k11 in the same file; a later session, so k5 and cuBLAS were
+re-measured alongside; median over 3 runs of the 7-run median; runs vary by ~2–3%,
+since the GB10 hits its power cap during SGEMM and settles near 2.0 GHz):
+
+| Step | N=2048 GFLOP/s | vs cuBLAS | N=4096 GFLOP/s | vs cuBLAS |
+|---|---|---|---|---|
+| k5 (re-measured) | 14,113 | 87% | 14,322 | 90% |
+| k6 B column pairs swapped (dropped) | 13,652 | 84% | 14,304 | 90% |
+| k7 `cp.async`, k5 tiling (dropped) | 13,896 | 86% | 14,181 | 89% |
+| **k8 128×256 tile, 16×8 per thread, `cp.async`** | **16,088** | **99%** | **16,270** | **102%** |
+| k9 k8 + split-K=3 (dropped at these sizes) | 14,089 | 87% | 15,255 | 96% |
+| k10 128×128 tile, 16×8 per thread, A k-major | 15,785 | 97% | 16,149 | 101% |
+| k11 picks k8/k9/k10 per size (= k8 here) | 15,614 | 96% | 16,248 | 102% |
+| cuBLAS (same runs) | 16,209 | 100% | 15,931 | 100% |
+
+**Round four** (k12–k15; same method, one session; N=2049 added because it leaves
+the last wave of 128×256 tiles partial, which is what k14 targets):
+
+| Step | N=2048 | vs cuBLAS | N=2049 | vs cuBLAS | N=4096 | vs cuBLAS |
+|---|---|---|---|---|---|---|
+| k8 (re-measured) | 16,101 | 99% | 12,541 | 106% | 17,034 | 105% |
+| k11 (re-measured) | 15,675 | 97% | 13,627 | 115% | 17,168 | 105% |
+| k12 k-major A at 128×256, register cap (dropped) | 15,440 | 95% | 12,034 | 101% | 16,730 | 103% |
+| k13 k8 with 4×4-lane half-warps, as cuBLAS (dropped, = k8; ncu: 25% more shared-load wavefronts, not fewer) | 15,862 | 98% | 12,522 | 106% | 17,093 | 105% |
+| **k14 k8 + last partial wave split into K pieces over all SMs** | **16,347** | **101%** | **14,108** | **119%** | **17,243** | **106%** |
+| k15 k11 below one wave of tiles, else k14 | 16,497 | 102% | 13,781 | 116% | 17,295 | 106% |
+| cuBLAS (same runs) | 16,240 | 100% | 11,864 | 100% | 16,296 | 100% |
+
 ```bash
 cd next
 nvcc -O3 -std=c++17 -arch=sm_121 -o sgemm_next sgemm_next.cu -lcublas   # use your GPU's sm_XX
